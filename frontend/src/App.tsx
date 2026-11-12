@@ -1,36 +1,44 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "./App.css";
 
+const API_URL = "http://localhost:8080/tasks";
+
 function App() {
-  // Initial sample tasks
-  const [tasks, setTasks] = useState([
-    {
-      id: 1,
-      title: "Complete React Assignment",
-      description: "Finish the React CRUD application",
-      dueDate: "2026-11-15",
-      status: "Pending",
-    },
-    {
-      id: 2,
-      title: "Study Database Concepts",
-      description: "Revise SQL and normalization",
-      dueDate: "2026-11-18",
-      status: "Completed",
-    },
-  ]);
+  const [tasks, setTasks] = useState([]);
 
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     dueDate: "",
-    status: "Pending",
+    status: "pending",
   });
 
   const [editId, setEditId] = useState(null);
 
+  // GET ALL TASKS
+  const fetchTasks = async () => {
+    try {
+      const response = await fetch(API_URL);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch tasks");
+      }
+
+      const data = await response.json();
+      setTasks(data.tasks || []);
+    } catch (error) {
+      console.error("Fetch Error:", error);
+      alert("Unable to load tasks. Check your backend server.");
+    }
+  };
+
+  // Load tasks when component mounts
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
   // Handle input changes
-  const handleChange = (e) => {
+  const handleChange = (e:any) => {
     const { name, value } = e.target;
 
     setFormData({
@@ -39,8 +47,8 @@ function App() {
     });
   };
 
-  // Add or Update Task
-  const handleSubmit = (e) => {
+  // ADD OR UPDATE TASK
+  const handleSubmit = async (e:any) => {
     e.preventDefault();
 
     if (!formData.title.trim()) {
@@ -48,64 +56,112 @@ function App() {
       return;
     }
 
-    if (editId !== null) {
-      // Update existing task
-      setTasks(
-        tasks.map((task) =>
-          task.id === editId
-            ? { ...task, ...formData }
-            : task
-        )
-      );
+    const taskData = {
+      student_name: "Saranya Kanakala",
+      title: formData.title,
+      description: formData.description,
+      subject: "General",
+      due_date: formData.dueDate || null,
+      status: formData.status,
+    };
 
-      setEditId(null);
-    } else {
-      // Add new task
-      const newTask = {
-        id: Date.now(),
-        ...formData,
-      };
+    try {
+      let response;
 
-      setTasks([...tasks, newTask]);
+      if (editId !== null) {
+        // PATCH - Update existing task
+        response = await fetch(`${API_URL}/${editId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(taskData),
+        });
+      } else {
+        // POST - Create new task
+        response = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(taskData),
+        });
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Operation failed");
+      }
+
+      alert(result.message);
+
+      resetForm();
+
+      // Refresh tasks from MySQL
+      fetchTasks();
+
+    } catch (error:any) {
+      console.error("Submit Error:", error);
+      alert(error.message || "Something went wrong");
     }
-
-    resetForm();
   };
 
-  // Edit Task
-  const handleEdit = (task) => {
+  // EDIT TASK
+  const handleEdit = (task:any) => {
     setFormData({
       title: task.title,
-      description: task.description,
-      dueDate: task.dueDate,
+      description: task.description || "",
+      dueDate: task.due_date
+        ? String(task.due_date).slice(0, 10)
+        : "",
       status: task.status,
     });
 
     setEditId(task.id);
   };
 
-  // Delete Task
-  const handleDelete = (id) => {
+  // DELETE TASK
+  const handleDelete = async (id:any) => {
     const confirmDelete = window.confirm(
       "Are you sure you want to delete this task?"
     );
 
     if (confirmDelete) {
-      setTasks(tasks.filter((task) => task.id !== id));
+      try {
+        const response = await fetch(`${API_URL}/${id}`, {
+          method: "DELETE",
+        });
 
-      if (editId === id) {
-        resetForm();
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.message || "Delete failed");
+        }
+
+        alert(result.message);
+
+        if (editId === id) {
+          resetForm();
+        }
+
+        // Refresh tasks from MySQL
+        fetchTasks();
+
+      } catch (error:any) {
+        console.error("Delete Error:", error);
+        alert(error?.message || "Unable to delete task");
       }
     }
   };
 
-  // Reset Form
+  // RESET FORM
   const resetForm = () => {
     setFormData({
       title: "",
       description: "",
       dueDate: "",
-      status: "Pending",
+      status: "pending",
     });
 
     setEditId(null);
@@ -141,6 +197,7 @@ function App() {
           />
 
           <label>Due Date</label>
+
           <input
             type="date"
             name="dueDate"
@@ -149,13 +206,15 @@ function App() {
           />
 
           <label>Status</label>
+
           <select
             name="status"
             value={formData.status}
             onChange={handleChange}
           >
-            <option value="Pending">Pending</option>
-            <option value="Completed">Completed</option>
+            <option value="pending">Pending</option>
+            <option value="in-progress">In Progress</option>
+            <option value="completed">Completed</option>
           </select>
 
           <button type="submit">
@@ -192,12 +251,25 @@ function App() {
             </thead>
 
             <tbody>
-              {tasks.map((task) => (
+              {tasks.map((task:any) => (
                 <tr key={task.id}>
                   <td>{task.title}</td>
+
                   <td>{task.description}</td>
-                  <td>{task.dueDate || "Not set"}</td>
-                  <td>{task.status}</td>
+
+                  <td>
+                    {task.due_date
+                      ? String(task.due_date).slice(0, 10)
+                      : "Not set"}
+                  </td>
+
+                  <td>
+                    {task.status === "in-progress"
+                      ? "In Progress"
+                      : task.status.charAt(0).toUpperCase() +
+                        task.status.slice(1)}
+                  </td>
+
                   <td>
                     <button
                       onClick={() => handleEdit(task)}
@@ -221,4 +293,4 @@ function App() {
   );
 }
 
-export default App;
+export default App
